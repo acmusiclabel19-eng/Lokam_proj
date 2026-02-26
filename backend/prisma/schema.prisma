@@ -1,0 +1,340 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  phone     String?
+  role      String   // ADMIN, AGENCY, OWNER, TENANT
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agency        Agency?
+  ownerProfile  OwnerProfile?
+  tenantProfile TenantProfile?
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Agency {
+  id          String @id @default(uuid())
+  userId      String @unique
+  name        String
+  description String?
+  address     String?
+  city        String @default("Abidjan")
+  country     String @default("Côte d'Ivoire")
+  licenseNumber String?
+  commissionRate Float @default(10.0)
+  logo        String?
+  
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  properties  Property[]
+  owners      OwnerProfile[]
+  tenants     TenantProfile[]
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("agencies")
+}
+
+model OwnerProfile {
+  id          String @id @default(uuid())
+  userId      String @unique
+  agencyId    String?
+  isManaged   Boolean @default(false)
+  address     String?
+  idNumber    String?
+  taxNumber   String?
+  bankAccount String?
+  bankName    String?
+  
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agency      Agency?    @relation(fields: [agencyId], references: [id])
+  properties  Property[]
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("owner_profiles")
+}
+
+model TenantProfile {
+  id              String @id @default(uuid())
+  userId          String @unique
+  agencyId        String?
+  emergencyContact String?
+  emergencyPhone  String?
+  profession      String?
+  employer        String?
+  monthlyIncome   Float?
+  idNumber        String?
+  idDocument      String?
+  
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agency          Agency?    @relation(fields: [agencyId], references: [id])
+  leases          Lease[]
+  payments        Payment[]
+  
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@map("tenant_profiles")
+}
+
+model Property {
+  id              String @id @default(uuid())
+  name            String
+  description     String?
+  
+  // Adresse
+  address         String
+  commune         String
+  quartier        String
+  city            String @default("Abidjan")
+  country         String @default("Côte d'Ivoire")
+  
+  // Type et caractéristiques
+  type            String // APPARTEMENT, STUDIO, VILLA_BASSE, VILLA_DUPLEX, IMMEUBLE, MAGASIN, BUREAU, ENTREPOT, TERRAIN
+  status          String @default("VACANT") // VACANT, OCCUPIED, MAINTENANCE, RESERVED
+  
+  // Détails
+  rooms           Int?
+  bedrooms        Int?
+  bathrooms       Int?
+  surface         Float?
+  floor           Int?
+  
+  // Photos
+  photos          PropertyPhoto[]
+  
+  // Relations
+  ownerId         String
+  agencyId        String?
+  
+  owner           OwnerProfile @relation(fields: [ownerId], references: [id])
+  agency          Agency?      @relation(fields: [agencyId], references: [id])
+  
+  // Modèle financier flexible
+  depositMonths   Int @default(3)
+  advanceMonths   Int @default(3)
+  feeMonths       Int @default(1)
+  monthlyRent     Float
+  
+  // Métriques calculées
+  occupancyRate   Float @default(0)
+  totalRevenue    Float @default(0)
+  
+  leases          Lease[]
+  maintenance     Maintenance[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("properties")
+}
+
+model PropertyPhoto {
+  id          String @id @default(uuid())
+  propertyId  String
+  url         String
+  isPrimary   Boolean @default(false)
+  
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+
+  @@map("property_photos")
+}
+
+model Lease {
+  id              String @id @default(uuid())
+  
+  propertyId      String
+  tenantId        String
+  
+  property        Property @relation(fields: [propertyId], references: [id])
+  tenant          TenantProfile @relation(fields: [tenantId], references: [id])
+  
+  // Dates
+  startDate       DateTime
+  endDate         DateTime
+  
+  // Montants
+  monthlyRent     Float
+  depositAmount   Float
+  advanceAmount   Float
+  feeAmount       Float
+  
+  // Statut
+  status          String @default("ACTIVE") // ACTIVE, EXPIRED, TERMINATED, PENDING
+  
+  // Documents
+  contractUrl     String?
+  
+  // États des lieux
+  entryInventory  Inventory? @relation("EntryInventory")
+  exitInventory   Inventory? @relation("ExitInventory")
+  
+  payments        Payment[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("leases")
+}
+
+model Inventory {
+  id          String @id @default(uuid())
+  leaseId     String @unique
+  type        String // "entry" ou "exit"
+  date        DateTime
+  notes       String?
+  photos      String? // JSON array of photo URLs
+  damages     String?
+  
+  entryLease  Lease? @relation("EntryInventory", fields: [leaseId], references: [id], onDelete: Cascade)
+  exitLease   Lease? @relation("ExitInventory", fields: [leaseId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+
+  @@map("inventories")
+}
+
+model Payment {
+  id              String @id @default(uuid())
+  
+  tenantId        String
+  leaseId         String?
+  propertyId      String?
+  
+  tenant          TenantProfile @relation(fields: [tenantId], references: [id])
+  lease           Lease? @relation(fields: [leaseId], references: [id])
+  
+  // Détails
+  type            String // LOYER, CAUTION, AVANCE, FRAIS
+  amount          Float
+  month           Int
+  year            Int
+  
+  // Paiement
+  method          String // WAVE, MOBILE_MONEY, ESPECE, VIREMENT
+  receiptUrl      String?
+  
+  // Validation
+  status          String @default("PENDING") // PENDING, VALIDATED, REJECTED
+  validatedBy     String?
+  validatedAt     DateTime?
+  rejectionReason String?
+  
+  // Quittance
+  quittanceUrl    String?
+  quittanceNumber String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("payments")
+}
+
+model Maintenance {
+  id              String @id @default(uuid())
+  
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id])
+  
+  // Signalement
+  reportedBy      String
+  title           String
+  description     String
+  photos          String? // JSON array
+  
+  // Priorité et statut
+  priority        String @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status          String @default("REPORTED") // REPORTED, IN_PROGRESS, COMPLETED, CANCELLED
+  
+  // Assignation
+  assignedTo      String?
+  providerName    String?
+  providerPhone   String?
+  
+  // Coûts
+  estimatedCost   Float?
+  actualCost      Float?
+  
+  // Dates
+  reportedAt      DateTime @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  
+  // Timeline
+  timeline        MaintenanceTimeline[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("maintenances")
+}
+
+model MaintenanceTimeline {
+  id              String @id @default(uuid())
+  maintenanceId   String
+  status          String
+  note            String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+  
+  maintenance     Maintenance @relation(fields: [maintenanceId], references: [id], onDelete: Cascade)
+
+  @@map("maintenance_timeline")
+}
+
+model Notification {
+  id          String @id @default(uuid())
+  userId      String
+  type        String // PAYMENT_DUE, PAYMENT_RECEIVED, MAINTENANCE_UPDATE, LEASE_EXPIRING, SYSTEM
+  title       String
+  message     String
+  isRead      Boolean @default(false)
+  data        String? // JSON
+  
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model FinancialReport {
+  id              String @id @default(uuid())
+  agencyId        String?
+  ownerId         String?
+  
+  periodStart     DateTime
+  periodEnd       DateTime
+  
+  totalRevenue    Float
+  totalExpenses   Float
+  netIncome       Float
+  
+  occupancyRate   Float
+  
+  data            String // JSON détaillé
+  
+  createdAt       DateTime @default(now())
+
+  @@map("financial_reports")
+}
