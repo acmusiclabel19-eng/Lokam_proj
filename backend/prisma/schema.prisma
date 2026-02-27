@@ -200,6 +200,7 @@ model Lease {
 model Inventory {
   id          String @id @default(uuid())
   leaseId     String @unique
+  exitLeaseId String?
   type        String // "entry" ou "exit"
   date        DateTime
   notes       String?
