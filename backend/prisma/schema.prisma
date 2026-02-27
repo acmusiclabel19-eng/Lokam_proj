@@ -206,10 +206,8 @@ model Inventory {
   photos      String? // JSON array of photo URLs
   damages     String?
   
-  entryLease  Lease? @relation("EntryInventory", fields: [leaseId], references: [id], onDelete: Cascade)
-  exitLease   Lease? @relation("ExitInventory", fields: [leaseId], references: [id], onDelete: Cascade)
-  
-  createdAt   DateTime @default(now())
+entryLease  Lease? @relation("EntryInventory", fields: [leaseId], references: [id], onDelete: Cascade, map: "inventories_entry_leaseId_fkey")
+exitLease   Lease? @relation("ExitInventory", fields: [exitLeaseId], references: [id], onDelete: Cascade, map: "inventories_exit_leaseId_fkey")
 
   @@map("inventories")
 }
